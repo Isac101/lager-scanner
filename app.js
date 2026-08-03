@@ -53,9 +53,8 @@
   /* ---------- Tillstånd ---------- */
   var db = null;
   var mediaStream = null;
-  var zxingReader = null;
   var nativeDetectLoopId = null;
-  var zxingTickTimeoutId = null;
+  var jsQRTickTimeoutId = null;
   var scanningActive = false;
   var pendingScan = null; // { url, html_data, extracted_text }
   var fetchAbortController = null;
@@ -221,8 +220,8 @@
       setStatus(scanStatus, "Rikta kameran mot QR-koden...");
       startNativeDetectLoop();
     } else {
-      setStatus(scanStatus, "Rikta kameran mot QR-koden... (ZXing)");
-      startZXingFallback();
+      setStatus(scanStatus, "Rikta kameran mot QR-koden...");
+      startJsQRFallback();
     }
   }
 
@@ -284,53 +283,38 @@
     nativeDetectLoopId = requestAnimationFrame(tick);
   }
 
-  function startZXingFallback() {
-    try {
-      zxingReader = new window.ZXing.BrowserQRCodeReader();
-      if (window.ZXing.DecodeHintType && zxingReader.hints !== undefined) {
-        var hints = new Map();
-        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
-        zxingReader.hints = hints;
-      }
-      scheduleZXingTick();
-    } catch (e) {
+  // jsQR ersatte ZXing som fallback-avläsare: verifierat mot ett verkligt
+  // paketfoto att ZXing missade koden vid ALLA testade uppskalningar
+  // (400-2000px), medan jsQR läste av den korrekt vid samtliga - jsQR:s
+  // avläsningsalgoritm är helt enkelt robustare för små/sneda koder på foton.
+  function startJsQRFallback() {
+    if (typeof window.jsQR !== "function") {
       setStatus(scanStatus, "QR-scanning stöds inte i denna webbläsare.", "error");
+      return;
     }
+    scheduleJsQRTick();
   }
 
-  function scheduleZXingTick() {
+  function scheduleJsQRTick() {
     if (!scanningActive) return;
-    zxingTickTimeoutId = setTimeout(zxingTick, 250);
+    jsQRTickTimeoutId = setTimeout(jsQRTick, 250);
   }
 
-  function zxingTick() {
+  function jsQRTick() {
     if (!scanningActive) return;
-    if (scanVideo.readyState < 2) { scheduleZXingTick(); return; }
+    if (scanVideo.readyState < 2) { scheduleJsQRTick(); return; }
     var crop = drawGuideBoxCrop(scanVideo);
-    if (!crop) { scheduleZXingTick(); return; }
-    crop.toBlob(function (blob) {
-      if (!blob || !scanningActive) { scheduleZXingTick(); return; }
-      var url = URL.createObjectURL(blob);
-      var img = new Image();
-      img.onload = function () {
-        zxingReader.decodeFromImageElement(img).then(function (result) {
-          URL.revokeObjectURL(url);
-          if (scanningActive && result) {
-            onScanSuccess(result.getText());
-          } else {
-            scheduleZXingTick();
-          }
-        }).catch(function () {
-          URL.revokeObjectURL(url);
-          scheduleZXingTick();
-        });
-      };
-      img.onerror = function () {
-        URL.revokeObjectURL(url);
-        scheduleZXingTick();
-      };
-      img.src = url;
-    }, "image/png");
+    if (!crop) { scheduleJsQRTick(); return; }
+    try {
+      var ctx = crop.getContext("2d");
+      var imageData = ctx.getImageData(0, 0, crop.width, crop.height);
+      var result = window.jsQR(imageData.data, crop.width, crop.height, { inversionAttempts: "attemptBoth" });
+      if (result && result.data && scanningActive) {
+        onScanSuccess(result.data);
+        return;
+      }
+    } catch (e) { /* tillfälliga fel ignoreras */ }
+    scheduleJsQRTick();
   }
 
   function stopScanner() {
@@ -340,13 +324,9 @@
       cancelAnimationFrame(nativeDetectLoopId);
       nativeDetectLoopId = null;
     }
-    if (zxingTickTimeoutId) {
-      clearTimeout(zxingTickTimeoutId);
-      zxingTickTimeoutId = null;
-    }
-    if (zxingReader) {
-      try { zxingReader.reset(); } catch (e) { /* noop */ }
-      zxingReader = null;
+    if (jsQRTickTimeoutId) {
+      clearTimeout(jsQRTickTimeoutId);
+      jsQRTickTimeoutId = null;
     }
     if (mediaStream) {
       mediaStream.getTracks().forEach(function (t) { t.stop(); });
