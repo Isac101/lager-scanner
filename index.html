@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Lager Scanner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- HUVUDVY -->
+  <section id="view-home" class="view active">
+    <header class="app-header">
+      <h1>LAGER SCANNER</h1>
+    </header>
+
+    <button id="btn-scan" class="btn btn-primary btn-huge">
+      <span class="icon">&#9635;</span> SKANNA QR
+    </button>
+
+    <div class="stat-box">
+      <div class="stat-label">Registrerade</div>
+      <div class="stat-value" id="stat-count">0</div>
+    </div>
+
+    <button id="btn-pdf" class="btn btn-accent btn-large">SKAPA PDF</button>
+
+    <h2 class="section-title">Senaste kollin</h2>
+    <ul id="list-recent" class="kolli-list"></ul>
+
+    <p id="home-status" class="status-text"></p>
+  </section>
+
+  <!-- SKANNER-VY -->
+  <section id="view-scanner" class="view">
+    <header class="app-header">
+      <h1>SKANNA QR</h1>
+    </header>
+
+    <div class="scanner-wrap">
+      <video id="scan-video" playsinline autoplay muted></video>
+      <div class="scan-frame"></div>
+    </div>
+
+    <p id="scan-status" class="status-text">Startar kamera...</p>
+
+    <button id="btn-scan-cancel" class="btn btn-secondary btn-large">AVBRYT</button>
+  </section>
+
+  <!-- HÄMTAR-VY -->
+  <section id="view-loading" class="view">
+    <header class="app-header">
+      <h1>HÄMTAR</h1>
+    </header>
+    <div class="spinner"></div>
+    <p id="loading-status" class="status-text">Hämtar information...</p>
+    <button id="btn-loading-cancel" class="btn btn-secondary btn-large">AVBRYT</button>
+  </section>
+
+  <!-- FORMULÄR-VY -->
+  <section id="view-form" class="view">
+    <header class="app-header">
+      <h1>REGISTRERA KOLLI</h1>
+    </header>
+
+    <form id="kolli-form">
+      <div class="field">
+        <label>URL:</label>
+        <div class="readonly-box" id="form-url">-</div>
+      </div>
+
+      <div class="field">
+        <label>Hämtad information:</label>
+        <div class="readonly-box scrollable" id="form-extracted">-</div>
+      </div>
+
+      <div class="field" id="fallback-frame-field" style="display:none">
+        <label>Sidan (reservvisning):</label>
+        <p class="fallback-note">
+          Automatisk hämtning misslyckades (troligen CORS-blockering). Om sidan tillåter inbäddning visas den nedan – annars är den tom och du kan öppna länken manuellt. Skriv gärna in viktig information i kommentarsfältet.
+        </p>
+        <div class="iframe-wrap">
+          <iframe id="fallback-iframe" src="about:blank" sandbox referrerpolicy="no-referrer" title="Förhandsvisning av skannad sida"></iframe>
+        </div>
+        <a id="fallback-open-link" class="btn btn-secondary btn-large" href="#" target="_blank" rel="noopener noreferrer">ÖPPNA LÄNK I WEBBLÄSAREN</a>
+      </div>
+
+      <div class="field">
+        <label for="input-kolli">Kolli:</label>
+        <input type="text" id="input-kolli" placeholder="C553" autocomplete="off" required>
+      </div>
+
+      <div class="field">
+        <label for="input-hyllplats">Hyllplats:</label>
+        <input type="text" id="input-hyllplats" placeholder="A12-04" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label for="input-kommentar">Kommentar:</label>
+        <textarea id="input-kommentar" rows="3" placeholder="Valfri kommentar"></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-huge">SPARA KOLLI</button>
+      <button type="button" id="btn-form-cancel" class="btn btn-secondary btn-large">AVBRYT</button>
+    </form>
+  </section>
+
+  <!-- PDF-VY -->
+  <section id="view-pdf" class="view">
+    <header class="app-header">
+      <h1>SKAPAR PDF</h1>
+    </header>
+    <div class="spinner"></div>
+    <p id="pdf-status" class="status-text">Bygger dokument...</p>
+    <button id="btn-pdf-back" class="btn btn-secondary btn-large" style="display:none">TILLBAKA</button>
+  </section>
+
+</div>
+
+<script src="libs/zxing.min.js"></script>
+<script src="libs/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
