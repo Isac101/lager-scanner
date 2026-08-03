@@ -31,6 +31,7 @@
   var scanVideo = document.getElementById("scan-video");
   var scanStatus = document.getElementById("scan-status");
   var btnScanCancel = document.getElementById("btn-scan-cancel");
+  var btnScanManual = document.getElementById("btn-scan-manual");
 
   var loadingStatus = document.getElementById("loading-status");
   var btnLoadingCancel = document.getElementById("btn-loading-cancel");
@@ -54,6 +55,7 @@
   var mediaStream = null;
   var zxingReader = null;
   var nativeDetectLoopId = null;
+  var zxingTickTimeoutId = null;
   var scanningActive = false;
   var pendingScan = null; // { url, html_data, extracted_text }
   var fetchAbortController = null;
@@ -224,6 +226,41 @@
     }
   }
 
+  var scanCropCanvas = document.createElement("canvas");
+  var CROP_TARGET_SIZE = 640;
+
+  // .scan-frame overlay sits at 15%-85% of the square .scanner-wrap, which the
+  // video fills via object-fit:cover. Map that guide box back to source video
+  // pixels so we decode a tight, upscaled crop instead of the whole frame -
+  // real package labels put the QR small/tilted in a much larger frame, and
+  // whole-frame decoding misses those (confirmed: decoding failed on full
+  // photos of a shipping label, but succeeded instantly once cropped tight).
+  function getGuideBoxRect(video) {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    var squareSize = Math.min(vw, vh);
+    var offsetX = (vw - squareSize) / 2;
+    var offsetY = (vh - squareSize) / 2;
+    var margin = 0.15;
+    var boxSize = squareSize * (1 - margin * 2);
+    return {
+      sx: offsetX + squareSize * margin,
+      sy: offsetY + squareSize * margin,
+      sw: boxSize,
+      sh: boxSize
+    };
+  }
+
+  function drawGuideBoxCrop(video) {
+    var rect = getGuideBoxRect(video);
+    if (!rect) return null;
+    scanCropCanvas.width = CROP_TARGET_SIZE;
+    scanCropCanvas.height = CROP_TARGET_SIZE;
+    var ctx = scanCropCanvas.getContext("2d");
+    ctx.drawImage(video, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, CROP_TARGET_SIZE, CROP_TARGET_SIZE);
+    return scanCropCanvas;
+  }
+
   function startNativeDetectLoop() {
     var detector = new window.BarcodeDetector({ formats: ["qr_code"] });
     var busy = false;
@@ -233,7 +270,8 @@
       if (!busy && scanVideo.readyState >= 2) {
         busy = true;
         try {
-          var codes = await detector.detect(scanVideo);
+          var crop = drawGuideBoxCrop(scanVideo);
+          var codes = await detector.detect(crop || scanVideo);
           if (codes && codes.length > 0 && scanningActive) {
             onScanSuccess(codes[0].rawValue);
             return;
@@ -249,16 +287,50 @@
   function startZXingFallback() {
     try {
       zxingReader = new window.ZXing.BrowserQRCodeReader();
-      zxingReader.decodeFromVideoElement(scanVideo, function (result, err) {
-        if (!scanningActive) return;
-        if (result) {
-          onScanSuccess(result.getText());
-        }
-        // "err" (NotFoundException) triggas kontinuerligt medan inget hittas - ignoreras
-      });
+      if (window.ZXing.DecodeHintType && zxingReader.hints !== undefined) {
+        var hints = new Map();
+        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingReader.hints = hints;
+      }
+      scheduleZXingTick();
     } catch (e) {
       setStatus(scanStatus, "QR-scanning stöds inte i denna webbläsare.", "error");
     }
+  }
+
+  function scheduleZXingTick() {
+    if (!scanningActive) return;
+    zxingTickTimeoutId = setTimeout(zxingTick, 250);
+  }
+
+  function zxingTick() {
+    if (!scanningActive) return;
+    if (scanVideo.readyState < 2) { scheduleZXingTick(); return; }
+    var crop = drawGuideBoxCrop(scanVideo);
+    if (!crop) { scheduleZXingTick(); return; }
+    crop.toBlob(function (blob) {
+      if (!blob || !scanningActive) { scheduleZXingTick(); return; }
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () {
+        zxingReader.decodeFromImageElement(img).then(function (result) {
+          URL.revokeObjectURL(url);
+          if (scanningActive && result) {
+            onScanSuccess(result.getText());
+          } else {
+            scheduleZXingTick();
+          }
+        }).catch(function () {
+          URL.revokeObjectURL(url);
+          scheduleZXingTick();
+        });
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        scheduleZXingTick();
+      };
+      img.src = url;
+    }, "image/png");
   }
 
   function stopScanner() {
@@ -267,6 +339,10 @@
     if (nativeDetectLoopId) {
       cancelAnimationFrame(nativeDetectLoopId);
       nativeDetectLoopId = null;
+    }
+    if (zxingTickTimeoutId) {
+      clearTimeout(zxingTickTimeoutId);
+      zxingTickTimeoutId = null;
     }
     if (zxingReader) {
       try { zxingReader.reset(); } catch (e) { /* noop */ }
@@ -543,6 +619,13 @@
   btnScanCancel.addEventListener("click", function () {
     stopScanner();
     showView("home");
+  });
+  btnScanManual.addEventListener("click", function () {
+    var url = window.prompt("Klistra in eller skriv in URL:en från paketet:", "https://");
+    if (url && url.trim()) {
+      stopScanner();
+      handleScannedUrl(url.trim());
+    }
   });
 
   btnLoadingCancel.addEventListener("click", function () {
