@@ -46,6 +46,7 @@
   var fallbackField = document.getElementById("fallback-frame-field");
   var fallbackIframe = document.getElementById("fallback-iframe");
   var fallbackOpenLink = document.getElementById("fallback-open-link");
+  var btnPasteClipboard = document.getElementById("btn-paste-clipboard");
 
   var pdfStatus = document.getElementById("pdf-status");
   var btnPdfBack = document.getElementById("btn-pdf-back");
@@ -390,6 +391,31 @@
     fallbackOpenLink.href = "#";
   }
 
+  // Cross-origin CORS blockerar fetch() helt (Same-Origin Policy - går inte
+  // att kringgå från JS, oavsett bibliotek). Men en användare som själv
+  // markerar/kopierar synlig text i förhandsvisningen kringgår det, eftersom
+  // det är webbläsarens egen kopiera-funktion, inte ett skript som läser
+  // cross-origin-DOM. Vi läser bara vad användaren redan lagt i urklipp.
+  async function pasteFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      window.alert("Urklipp stöds inte i denna webbläsare. Skriv in informationen manuellt i kommentarsfältet istället.");
+      return;
+    }
+    try {
+      var text = await navigator.clipboard.readText();
+      text = (text || "").trim();
+      if (!text) {
+        window.alert("Urklippet är tomt. Markera och kopiera texten i förhandsvisningen ovan först.");
+        return;
+      }
+      text = text.slice(0, MAX_STORED_TEXT);
+      if (pendingScan) pendingScan.extracted_text = text;
+      formExtracted.textContent = text;
+    } catch (err) {
+      window.alert("Kunde inte läsa urklipp: " + (err && err.message ? err.message : err));
+    }
+  }
+
   async function saveKolli(e) {
     e.preventDefault();
     var kolli = inputKolli.value.trim();
@@ -616,6 +642,7 @@
 
   kolliForm.addEventListener("submit", saveKolli);
   btnFormCancel.addEventListener("click", cancelForm);
+  btnPasteClipboard.addEventListener("click", pasteFromClipboard);
 
   btnPdf.addEventListener("click", createPdf);
   btnPdfBack.addEventListener("click", function () { showView("home"); });

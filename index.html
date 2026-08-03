@@ -80,11 +80,12 @@
       <div class="field" id="fallback-frame-field" style="display:none">
         <label>Sidan (reservvisning):</label>
         <p class="fallback-note">
-          Automatisk hämtning misslyckades (troligen CORS-blockering). Om sidan tillåter inbäddning visas den nedan – annars är den tom och du kan öppna länken manuellt. Skriv gärna in viktig information i kommentarsfältet.
+          Automatisk hämtning misslyckades (troligen CORS-blockering). Om sidan tillåter inbäddning visas den nedan. Tryck och håll i förhandsvisningen → Markera allt → Kopiera, tryck sedan "Klistra in från urklipp" nedan för att fylla i informationen automatiskt.
         </p>
         <div class="iframe-wrap">
           <iframe id="fallback-iframe" src="about:blank" sandbox referrerpolicy="no-referrer" title="Förhandsvisning av skannad sida"></iframe>
         </div>
+        <button type="button" id="btn-paste-clipboard" class="btn btn-accent btn-large">KLISTRA IN FRÅN URKLIPP</button>
         <a id="fallback-open-link" class="btn btn-secondary btn-large" href="#" target="_blank" rel="noopener noreferrer">ÖPPNA LÄNK I WEBBLÄSAREN</a>
       </div>
 
